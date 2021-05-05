@@ -56,6 +56,12 @@
 #include <linux/percpu.h>
 #include <linux/kmemleak.h>
 
+/* patched by korg r&d to improve load_module() execution time. pruning the strtab for unused symbols
+** in OA.ko takes about 20 seconds. Better to have extra symbol names in memory. Setting
+** PEABODY_ENABLE_STRTAB_REDUCTION to 0 disables this feature in the kernel.
+*/
+#define PEABODY_ENABLE_STRTAB_REDUCTION 0
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/module.h>
 
@@ -1920,8 +1926,13 @@ static unsigned long layout_symtab(struct module *mod,
 				   unsigned int strindex,
 				   const Elf_Ehdr *hdr,
 				   const char *secstrings,
-				   unsigned long *pstroffs,
-				   unsigned long *strmap)
+				   unsigned long *pstroffs
+				  
+				#if PEABODY_ENABLE_STRTAB_REDUCTION
+				   , unsigned long *strmap
+				#endif
+				   
+				   )
 {
 	unsigned long symoffs;
 	Elf_Shdr *symsect = sechdrs + symindex;
@@ -1941,10 +1952,13 @@ static unsigned long layout_symtab(struct module *mod,
 	strtab = (void *)hdr + strsect->sh_offset;
 	for (ndst = i = 1; i < nsrc; ++i, ++src)
 		if (is_core_symbol(src, sechdrs, hdr->e_shnum)) {
+		#if PEABODY_ENABLE_STRTAB_REDUCTION
 			unsigned int j = src->st_name;
 
 			while(!__test_and_set_bit(j, strmap) && strtab[j])
 				++j;
+		#endif
+
 			++ndst;
 		}
 
@@ -1960,8 +1974,13 @@ static unsigned long layout_symtab(struct module *mod,
 
 	/* Append room for core symbols' strings at end of core part. */
 	*pstroffs = mod->core_size;
+
+#if PEABODY_ENABLE_STRTAB_REDUCTION
 	__set_bit(0, strmap);
 	mod->core_size += bitmap_weight(strmap, strsect->sh_size);
+#else
+	mod->core_size += strsect->sh_size;
+#endif
 
 	return symoffs;
 }
@@ -1973,8 +1992,13 @@ static void add_kallsyms(struct module *mod,
 			 unsigned int strindex,
 			 unsigned long symoffs,
 			 unsigned long stroffs,
-			 const char *secstrings,
-			 unsigned long *strmap)
+			 const char *secstrings
+				  
+			#if PEABODY_ENABLE_STRTAB_REDUCTION
+		     , unsigned long *strmap
+			#endif
+				   
+			 )
 {
 	unsigned int i, ndst;
 	const Elf_Sym *src;
@@ -1997,15 +2021,22 @@ static void add_kallsyms(struct module *mod,
 		if (!is_core_symbol(src, sechdrs, shnum))
 			continue;
 		dst[ndst] = *src;
+	#if PEABODY_ENABLE_STRTAB_REDUCTION
 		dst[ndst].st_name = bitmap_weight(strmap, dst[ndst].st_name);
+	#endif
 		++ndst;
 	}
 	mod->core_num_syms = ndst;
 
 	mod->core_strtab = s = mod->module_core + stroffs;
-	for (*s = 0, i = 1; i < sechdrs[strindex].sh_size; ++i)
+	for (*s = 0, i = 1; i < sechdrs[strindex].sh_size; ++i) {
+	#if PEABODY_ENABLE_STRTAB_REDUCTION
 		if (test_bit(i, strmap))
+	#endif
+		{
 			*++s = mod->strtab[i];
+		}
+	}
 }
 #else
 static inline unsigned long layout_symtab(struct module *mod,
@@ -2014,8 +2045,11 @@ static inline unsigned long layout_symtab(struct module *mod,
 					  unsigned int strindex,
 					  const Elf_Ehdr *hdr,
 					  const char *secstrings,
-					  unsigned long *pstroffs,
-					  unsigned long *strmap)
+					  unsigned long *pstroffs
+					#if PEABODY_ENABLE_STRTAB_REDUCTION
+				      , unsigned long *strmap
+					#endif
+					  )				   
 {
 	return 0;
 }
@@ -2027,8 +2061,11 @@ static inline void add_kallsyms(struct module *mod,
 				unsigned int strindex,
 				unsigned long symoffs,
 				unsigned long stroffs,
-				const char *secstrings,
-				const unsigned long *strmap)
+				const char *secstrings
+			#if PEABODY_ENABLE_STRTAB_REDUCTION
+				, const unsigned long *strmap
+			#endif
+				)
 {
 }
 #endif /* CONFIG_KALLSYMS */
@@ -2103,7 +2140,11 @@ static noinline struct module *load_module(void __user *umod,
 	struct module *mod;
 	long err = 0;
 	void *percpu = NULL, *ptr = NULL; /* Stops spurious gcc warning */
-	unsigned long symoffs, stroffs, *strmap;
+	unsigned long symoffs, stroffs;
+
+#if PEABODY_ENABLE_STRTAB_REDUCTION
+	unsigned long *strmap;
+#endif
 
 	mm_segment_t old_fs;
 
@@ -2114,7 +2155,8 @@ static noinline struct module *load_module(void __user *umod,
 
 	/* Suck in entire file: we'll want most of it. */
 	/* vmalloc barfs on "unusual" numbers.  Check here */
-	if (len > 64 * 1024 * 1024 || (hdr = vmalloc(len)) == NULL)
+	/* 64M module size limit removed by korg r&d */
+	if ((hdr = vmalloc(len)) == NULL)
 		return ERR_PTR(-ENOMEM);
 
 	if (copy_from_user(hdr, umod, len) != 0) {
@@ -2221,12 +2263,14 @@ static noinline struct module *load_module(void __user *umod,
 		goto free_hdr;
 	}
 
+#if PEABODY_ENABLE_STRTAB_REDUCTION
 	strmap = kzalloc(BITS_TO_LONGS(sechdrs[strindex].sh_size)
 			 * sizeof(long), GFP_KERNEL);
 	if (!strmap) {
 		err = -ENOMEM;
 		goto free_mod;
 	}
+#endif
 
 	if (find_module(mod->name)) {
 		err = -EEXIST;
@@ -2258,7 +2302,11 @@ static noinline struct module *load_module(void __user *umod,
 	   special cases for the architectures. */
 	layout_sections(mod, hdr, sechdrs, secstrings);
 	symoffs = layout_symtab(mod, sechdrs, symindex, strindex, hdr,
-				secstrings, &stroffs, strmap);
+				secstrings, &stroffs
+			#if PEABODY_ENABLE_STRTAB_REDUCTION
+				, strmap
+			#endif
+				);
 
 	/* Do the allocs. */
 	ptr = module_alloc_update_bounds(mod->core_size);
@@ -2464,9 +2512,15 @@ static noinline struct module *load_module(void __user *umod,
 		       sechdrs[pcpuindex].sh_size);
 
 	add_kallsyms(mod, sechdrs, hdr->e_shnum, symindex, strindex,
-		     symoffs, stroffs, secstrings, strmap);
+		     symoffs, stroffs, secstrings
+		#if PEABODY_ENABLE_STRTAB_REDUCTION
+		     , strmap
+		#endif
+			 );
+#if PEABODY_ENABLE_STRTAB_REDUCTION
 	kfree(strmap);
 	strmap = NULL;
+#endif
 
 	if (!mod->taints) {
 		struct _ddebug *debug;
@@ -2556,7 +2610,9 @@ static noinline struct module *load_module(void __user *umod,
 		percpu_modfree(percpu);
  free_mod:
 	kfree(args);
+#if PEABODY_ENABLE_STRTAB_REDUCTION
 	kfree(strmap);
+#endif
  free_hdr:
 	vfree(hdr);
 	return ERR_PTR(err);
