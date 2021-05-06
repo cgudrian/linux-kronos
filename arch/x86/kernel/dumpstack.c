@@ -327,6 +327,7 @@ die_nmi(char *str, struct pt_regs *regs, int do_panic)
 	local_irq_enable();
 	do_exit(SIGBUS);
 }
+EXPORT_SYMBOL_GPL(die_nmi);
 
 static int __init oops_setup(char *s)
 {

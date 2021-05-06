@@ -57,11 +57,15 @@ static union smp_flush_state flush_state[NUM_INVALIDATE_TLB_VECTORS];
  */
 void leave_mm(int cpu)
 {
+ 	unsigned long flags;
+
 	if (percpu_read(cpu_tlbstate.state) == TLBSTATE_OK)
 		BUG();
+ 	local_irq_save_hw_cond(flags);
 	cpumask_clear_cpu(cpu,
 			  mm_cpumask(percpu_read(cpu_tlbstate.active_mm)));
 	load_cr3(swapper_pg_dir);
+ 	local_irq_restore_hw_cond(flags);
 }
 EXPORT_SYMBOL_GPL(leave_mm);
 
@@ -192,6 +196,9 @@ static void flush_tlb_others_ipi(const struct cpumask *cpumask,
 		apic->send_IPI_mask(to_cpumask(f->flush_cpumask),
 			      INVALIDATE_TLB_VECTOR_START + sender);
 
+#ifdef CONFIG_IPIPE
+		WARN_ON_ONCE(irqs_disabled_hw());
+#endif
 		while (!cpumask_empty(to_cpumask(f->flush_cpumask)))
 			cpu_relax();
 	}

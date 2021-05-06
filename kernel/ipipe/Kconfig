@@ -1,0 +1,35 @@
+config IPIPE
+	bool "Interrupt pipeline"
+	default y
+	---help---
+	  Activate this option if you want the interrupt pipeline to be
+	  compiled in.
+
+config IPIPE_DOMAINS
+	int "Max domains"
+	depends on IPIPE
+	default 4
+	---help---
+	The maximum number of I-pipe domains to run concurrently.
+
+config IPIPE_COMPAT
+	bool "Maintain code compatibility with older releases"
+	depends on IPIPE
+	default y
+	---help---
+	Activate this option if you want the compatibility code to be
+	defined, so that older I-pipe clients may use obsolete
+	constructs. WARNING: obsolete code will be eventually
+	deprecated in future I-pipe releases, and removed from the
+	compatibility support as time passes. Please fix I-pipe
+	clients to get rid of such uses as soon as possible.
+
+config IPIPE_DELAYED_ATOMICSW
+       bool
+       depends on IPIPE
+       default n
+
+config IPIPE_UNMASKED_CONTEXT_SWITCH
+       bool
+       depends on IPIPE
+       default n

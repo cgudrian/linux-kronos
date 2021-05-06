@@ -35,6 +35,13 @@ extern void spurious_interrupt(void);
 extern void thermal_interrupt(void);
 extern void reschedule_interrupt(void);
 extern void mce_self_interrupt(void);
+#ifdef CONFIG_IPIPE
+void ipipe_ipi0(void);
+void ipipe_ipi1(void);
+void ipipe_ipi2(void);
+void ipipe_ipi3(void);
+void ipipe_ipiX(void);
+#endif
 
 extern void invalidate_interrupt(void);
 extern void invalidate_interrupt0(void);
@@ -115,6 +122,7 @@ extern void smp_invalidate_interrupt(struct pt_regs *);
 #else
 extern asmlinkage void smp_invalidate_interrupt(struct pt_regs *);
 #endif
+extern asmlinkage void smp_reboot_interrupt(void);
 #endif
 
 extern void (*__initconst interrupt[NR_VECTORS-FIRST_EXTERNAL_VECTOR])(void);

@@ -18,7 +18,7 @@ cyrix_get_arr(unsigned int reg, unsigned long *base,
 
 	arr = CX86_ARR_BASE + (reg << 1) + reg;	/* avoid multiplication by 3 */
 
-	local_irq_save(flags);
+	local_irq_save_hw(flags);
 
 	ccr3 = getCx86(CX86_CCR3);
 	setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10);	/* enable MAPEN */
@@ -28,7 +28,7 @@ cyrix_get_arr(unsigned int reg, unsigned long *base,
 	rcr = getCx86(CX86_RCR_BASE + reg);
 	setCx86(CX86_CCR3, ccr3);			/* disable MAPEN */
 
-	local_irq_restore(flags);
+	local_irq_restore_hw(flags);
 
 	shift = ((unsigned char *) base)[1] & 0x0f;
 	*base >>= PAGE_SHIFT;
@@ -178,6 +178,7 @@ static void cyrix_set_arr(unsigned int reg, unsigned long base,
 			  unsigned long size, mtrr_type type)
 {
 	unsigned char arr, arr_type, arr_size;
+	unsigned long flags;
 
 	arr = CX86_ARR_BASE + (reg << 1) + reg;	/* avoid multiplication by 3 */
 
@@ -221,6 +222,8 @@ static void cyrix_set_arr(unsigned int reg, unsigned long base,
 		}
 	}
 
+	local_irq_save_hw(flags);
+
 	prepare_set();
 
 	base <<= PAGE_SHIFT;
@@ -230,6 +233,8 @@ static void cyrix_set_arr(unsigned int reg, unsigned long base,
 	setCx86(CX86_RCR_BASE + reg, arr_type);
 
 	post_set();
+
+	local_irq_restore_hw(flags);
 }
 
 typedef struct {
@@ -247,8 +252,10 @@ static unsigned char ccr_state[7] = { 0, 0, 0, 0, 0, 0, 0 };
 
 static void cyrix_set_all(void)
 {
+	unsigned long flags;
 	int i;
 
+	local_irq_save_hw(flags);
 	prepare_set();
 
 	/* the CCRs are not contiguous */
@@ -263,6 +270,7 @@ static void cyrix_set_all(void)
 	}
 
 	post_set();
+	local_irq_restore_hw(flags);
 }
 
 static struct mtrr_ops cyrix_mtrr_ops = {

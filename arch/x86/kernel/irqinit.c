@@ -159,11 +159,13 @@ static void __init smp_intr_init(void)
 	alloc_intr_gate(INVALIDATE_TLB_VECTOR_START+0, invalidate_interrupt0);
 	alloc_intr_gate(INVALIDATE_TLB_VECTOR_START+1, invalidate_interrupt1);
 	alloc_intr_gate(INVALIDATE_TLB_VECTOR_START+2, invalidate_interrupt2);
+#ifndef CONFIG_IPIPE
 	alloc_intr_gate(INVALIDATE_TLB_VECTOR_START+3, invalidate_interrupt3);
 	alloc_intr_gate(INVALIDATE_TLB_VECTOR_START+4, invalidate_interrupt4);
 	alloc_intr_gate(INVALIDATE_TLB_VECTOR_START+5, invalidate_interrupt5);
 	alloc_intr_gate(INVALIDATE_TLB_VECTOR_START+6, invalidate_interrupt6);
 	alloc_intr_gate(INVALIDATE_TLB_VECTOR_START+7, invalidate_interrupt7);
+#endif
 
 	/* IPI for generic function call */
 	alloc_intr_gate(CALL_FUNCTION_VECTOR, call_function_interrupt);
@@ -178,6 +180,10 @@ static void __init smp_intr_init(void)
 
 	/* IPI used for rebooting/stopping */
 	alloc_intr_gate(REBOOT_VECTOR, reboot_interrupt);
+#if defined(CONFIG_IPIPE) && defined(CONFIG_X86_32)
+	/* IPI for critical lock */
+	alloc_intr_gate(IPIPE_CRITICAL_VECTOR, ipipe_ipiX);
+#endif
 #endif
 #endif /* CONFIG_SMP */
 }
@@ -212,6 +218,12 @@ static void __init apic_intr_init(void)
 	alloc_intr_gate(LOCAL_PENDING_VECTOR, perf_pending_interrupt);
 # endif
 
+#if defined(CONFIG_IPIPE) && defined(CONFIG_X86_32)
+	alloc_intr_gate(IPIPE_SERVICE_VECTOR0, ipipe_ipi0);
+	alloc_intr_gate(IPIPE_SERVICE_VECTOR1, ipipe_ipi1);
+	alloc_intr_gate(IPIPE_SERVICE_VECTOR2, ipipe_ipi2);
+	alloc_intr_gate(IPIPE_SERVICE_VECTOR3, ipipe_ipi3);
+#endif
 #endif
 }
 

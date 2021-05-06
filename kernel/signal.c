@@ -518,6 +518,7 @@ void signal_wake_up(struct task_struct *t, int resume)
 	unsigned int mask;
 
 	set_tsk_thread_flag(t, TIF_SIGPENDING);
+	ipipe_sigwake_notify(t); /* TIF_SIGPENDING must be set first. */
 
 	/*
 	 * For SIGKILL, we want to wake it up in the stopped/traced/killable

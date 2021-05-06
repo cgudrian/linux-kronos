@@ -28,6 +28,7 @@
 #include <linux/ctype.h>
 #include <linux/list.h>
 #include <linux/hash.h>
+#include <linux/ipipe.h>
 
 #include <trace/events/sched.h>
 
@@ -1142,6 +1143,9 @@ static int __ftrace_modify_code(void *data)
 
 static void ftrace_run_update_code(int command)
 {
+#ifdef CONFIG_IPIPE
+	unsigned long flags;
+#endif /* CONFIG_IPIPE */
 	int ret;
 
 	ret = ftrace_arch_code_modify_prepare();
@@ -1149,7 +1153,13 @@ static void ftrace_run_update_code(int command)
 	if (ret)
 		return;
 
+#ifdef CONFIG_IPIPE
+	flags = ipipe_critical_enter(NULL);
+	__ftrace_modify_code(&command);
+	ipipe_critical_exit(flags);
+#else  /* !CONFIG_IPIPE */
 	stop_machine(__ftrace_modify_code, &command, NULL);
+#endif /* !CONFIG_IPIPE */
 
 	ret = ftrace_arch_code_modify_post_process();
 	FTRACE_WARN_ON(ret);
@@ -2648,9 +2658,9 @@ static int ftrace_convert_nops(struct module *mod,
 	}
 
 	/* disable interrupts to prevent kstop machine */
-	local_irq_save(flags);
+	local_irq_save_hw_notrace(flags);
 	ftrace_update_code(mod);
-	local_irq_restore(flags);
+	local_irq_restore_hw_notrace(flags);
 	mutex_unlock(&ftrace_lock);
 
 	return 0;
@@ -2729,9 +2739,9 @@ void __init ftrace_init(void)
 	/* Keep the ftrace pointer to the stub */
 	addr = (unsigned long)ftrace_stub;
 
-	local_irq_save(flags);
+	local_irq_save_hw_notrace(flags);
 	ftrace_dyn_arch_init(&addr);
-	local_irq_restore(flags);
+	local_irq_restore_hw_notrace(flags);
 
 	/* ftrace_dyn_arch_init places the return code in addr */
 	if (addr)
