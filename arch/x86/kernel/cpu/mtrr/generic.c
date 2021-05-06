@@ -635,7 +635,7 @@ static void generic_set_all(void)
 	unsigned long mask, count;
 	unsigned long flags;
 
-	local_irq_save(flags);
+	local_irq_save_hw(flags);
 	prepare_set();
 
 	/* Actually set the state */
@@ -645,7 +645,7 @@ static void generic_set_all(void)
 	pat_init();
 
 	post_set();
-	local_irq_restore(flags);
+	local_irq_restore_hw(flags);
 
 	/* Use the atomic bitops to update the global mask */
 	for (count = 0; count < sizeof mask * 8; ++count) {
@@ -669,12 +669,12 @@ static void generic_set_all(void)
 static void generic_set_mtrr(unsigned int reg, unsigned long base,
 			     unsigned long size, mtrr_type type)
 {
-	unsigned long flags;
+	unsigned long flags, _flags;
 	struct mtrr_var_range *vr;
 
 	vr = &mtrr_state.var_ranges[reg];
 
-	local_irq_save(flags);
+	local_irq_save_full(flags, _flags);
 	prepare_set();
 
 	if (size == 0) {
@@ -695,7 +695,7 @@ static void generic_set_mtrr(unsigned int reg, unsigned long base,
 	}
 
 	post_set();
-	local_irq_restore(flags);
+	local_irq_restore_full(flags, _flags);
 }
 
 int generic_validate_add_page(unsigned long base, unsigned long size,

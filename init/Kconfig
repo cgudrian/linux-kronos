@@ -78,6 +78,7 @@ config INIT_ENV_ARG_LIMIT
 
 config LOCALVERSION
 	string "Local version - append to kernel release"
+	default "-ipipe"
 	help
 	  Append an extra string to the end of your kernel version.
 	  This will show up when you type uname, for example.

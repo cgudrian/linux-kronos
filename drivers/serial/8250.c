@@ -3016,6 +3016,53 @@ static int serial8250_resume(struct platform_device *dev)
 	return 0;
 }
 
+#if defined(CONFIG_IPIPE_DEBUG) && defined(CONFIG_SERIAL_8250_CONSOLE)
+
+#include <stdarg.h>
+
+void __weak __ipipe_serial_debug(const char *fmt, ...)
+{
+        struct uart_8250_port *up = &serial8250_ports[0];
+        unsigned int ier, count;
+        unsigned long flags;
+        char buf[128];
+        va_list ap;
+
+        va_start(ap, fmt);
+        vsprintf(buf, fmt, ap);
+        va_end(ap);
+        count = strlen(buf);
+
+        touch_nmi_watchdog();
+
+        local_irq_save_hw(flags);
+
+        /*
+         *      First save the IER then disable the interrupts
+        */
+        ier = serial_in(up, UART_IER);
+
+        if (up->capabilities & UART_CAP_UUE)
+                serial_out(up, UART_IER, UART_IER_UUE);
+        else
+                serial_out(up, UART_IER, 0);
+
+        uart_console_write(&up->port, buf, count, serial8250_console_putchar);
+
+        /*
+         *      Finally, wait for transmitter to become empty
+         *      and restore the IER
+         */
+        wait_for_xmitr(up, BOTH_EMPTY);
+        serial_out(up, UART_IER, ier);
+
+        local_irq_restore_hw(flags);
+}
+
+EXPORT_SYMBOL(__ipipe_serial_debug);
+
+#endif
+
 static struct platform_driver serial8250_isa_driver = {
 	.probe		= serial8250_probe,
 	.remove		= __devexit_p(serial8250_remove),

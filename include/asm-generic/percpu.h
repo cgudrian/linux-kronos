@@ -56,6 +56,20 @@ extern unsigned long __per_cpu_offset[NR_CPUS];
 #define __raw_get_cpu_var(var) \
 	(*SHIFT_PERCPU_PTR(&per_cpu_var(var), __my_cpu_offset))
 
+#ifdef CONFIG_IPIPE
+#if defined(CONFIG_IPIPE_DEBUG_INTERNAL) && defined(CONFIG_SMP)
+extern int __ipipe_check_percpu_access(void);
+#define __ipipe_local_cpu_offset				\
+	({							\
+		WARN_ON_ONCE(__ipipe_check_percpu_access());	\
+		__my_cpu_offset;				\
+	})
+#else
+#define __ipipe_local_cpu_offset  __my_cpu_offset
+#endif
+#define __ipipe_get_cpu_var(var) \
+	(*SHIFT_PERCPU_PTR(&per_cpu_var(var), __ipipe_local_cpu_offset))
+#endif /* CONFIG_IPIPE */
 
 #ifdef CONFIG_HAVE_SETUP_PER_CPU_AREA
 extern void setup_per_cpu_areas(void);
@@ -66,6 +80,7 @@ extern void setup_per_cpu_areas(void);
 #define per_cpu(var, cpu)			(*((void)(cpu), &per_cpu_var(var)))
 #define __get_cpu_var(var)			per_cpu_var(var)
 #define __raw_get_cpu_var(var)			per_cpu_var(var)
+#define __ipipe_get_cpu_var(var)		__raw_get_cpu_var(var)
 
 #endif	/* SMP */
 

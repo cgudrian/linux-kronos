@@ -564,6 +564,41 @@ static int have_callable_console(void)
 	return 0;
 }
 
+#ifdef CONFIG_IPIPE
+
+static ipipe_spinlock_t __ipipe_printk_lock = IPIPE_SPIN_LOCK_UNLOCKED;
+
+static int __ipipe_printk_fill;
+
+static char __ipipe_printk_buf[__LOG_BUF_LEN];
+
+void __ipipe_flush_printk (unsigned virq, void *cookie)
+{
+	char *p = __ipipe_printk_buf;
+	int len, lmax, out = 0;
+	unsigned long flags;
+
+	goto start;
+
+	do {
+		spin_unlock_irqrestore(&__ipipe_printk_lock, flags);
+ start:
+		lmax = __ipipe_printk_fill;
+		while (out < lmax) {
+			len = strlen(p) + 1;
+			printk("%s",p);
+			p += len;
+			out += len;
+		}
+		spin_lock_irqsave(&__ipipe_printk_lock, flags);
+	}
+	while (__ipipe_printk_fill != lmax);
+
+	__ipipe_printk_fill = 0;
+
+	spin_unlock_irqrestore(&__ipipe_printk_lock, flags);
+}
+
 /**
  * printk - print a kernel message
  * @fmt: format string
@@ -588,6 +623,65 @@ static int have_callable_console(void)
 
 asmlinkage int printk(const char *fmt, ...)
 {
+	int r, fbytes, oldcount;
+	unsigned long flags;
+	int sprintk = 1;
+	int cs = -1;
+	va_list args;
+
+	va_start(args, fmt);
+
+	local_irq_save_hw(flags);
+
+	if (test_bit(IPIPE_SPRINTK_FLAG, &__ipipe_current_domain->flags) ||
+	    oops_in_progress)
+		cs = ipipe_disable_context_check(ipipe_processor_id());
+	else if (__ipipe_current_domain == ipipe_root_domain) {
+		struct ipipe_domain *dom;
+
+		list_for_each_entry(dom, &__ipipe_pipeline, p_link) {
+			if (dom == ipipe_root_domain)
+				break;
+			if (test_bit(IPIPE_STALL_FLAG,
+				     &ipipe_cpudom_var(dom, status)))
+				sprintk = 0;
+		}
+	} else
+		sprintk = 0;
+
+	local_irq_restore_hw(flags);
+
+	if (sprintk) {
+		r = vprintk(fmt, args);
+		if (cs != -1)
+			ipipe_restore_context_check(ipipe_processor_id(), cs);
+		goto out;
+	}
+
+	spin_lock_irqsave(&__ipipe_printk_lock, flags);
+
+	oldcount = __ipipe_printk_fill;
+	fbytes = __LOG_BUF_LEN - oldcount;
+
+	if (fbytes > 1)	{
+		r = vscnprintf(__ipipe_printk_buf + __ipipe_printk_fill,
+			       fbytes, fmt, args) + 1; /* account for the null byte */
+		__ipipe_printk_fill += r;
+	} else
+		r = 0;
+
+	spin_unlock_irqrestore(&__ipipe_printk_lock, flags);
+
+	if (oldcount == 0)
+		ipipe_trigger_irq(__ipipe_printk_virq);
+out:
+	va_end(args);
+
+	return r;
+}
+#else /* !CONFIG_IPIPE */
+asmlinkage int printk(const char *fmt, ...)
+{
 	va_list args;
 	int r;
 
@@ -597,6 +691,7 @@ asmlinkage int printk(const char *fmt, ...)
 
 	return r;
 }
+#endif /* CONFIG_IPIPE */
 
 /* cpu currently holding logbuf_lock */
 static volatile unsigned int printk_cpu = UINT_MAX;

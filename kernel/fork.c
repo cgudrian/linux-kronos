@@ -511,6 +511,7 @@ void mmput(struct mm_struct *mm)
 		exit_aio(mm);
 		ksm_exit(mm);
 		exit_mmap(mm);
+ 		ipipe_cleanup_notify(mm);
 		set_mm_exe_file(mm, NULL);
 		if (!list_empty(&mm->mmlist)) {
 			spin_lock(&mmlist_lock);
@@ -918,7 +919,7 @@ static void copy_flags(unsigned long clone_flags, struct task_struct *p)
 {
 	unsigned long new_flags = p->flags;
 
-	new_flags &= ~PF_SUPERPRIV;
+ 	new_flags &= ~(PF_SUPERPRIV | PF_EVNOTIFY);
 	new_flags |= PF_FORKNOEXEC;
 	new_flags |= PF_STARTING;
 	p->flags = new_flags;
@@ -1303,6 +1304,9 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	write_unlock_irq(&tasklist_lock);
 	proc_fork_connector(p);
 	cgroup_post_fork(p);
+#ifdef CONFIG_IPIPE
+	memset(p->ptd, 0, sizeof(p->ptd));
+#endif /* CONFIG_IPIPE */
 	perf_event_fork(p);
 	return p;
 
@@ -1700,11 +1704,14 @@ SYSCALL_DEFINE1(unshare, unsigned long, unshare_flags)
 		}
 
 		if (new_mm) {
+			unsigned long flags;
 			mm = current->mm;
 			active_mm = current->active_mm;
 			current->mm = new_mm;
+			ipipe_mm_switch_protect(flags);
 			current->active_mm = new_mm;
 			activate_mm(active_mm, new_mm);
+			ipipe_mm_switch_unprotect(flags);
 			new_mm = mm;
 		}
 

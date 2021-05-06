@@ -59,6 +59,10 @@ static unsigned int nmi_hz = HZ;
 static DEFINE_PER_CPU(short, wd_enabled);
 static int endflag __initdata;
 
+static int default_nmi_watchdog_tick(struct pt_regs * regs, unsigned reason);
+int (*nmi_watchdog_tick) (struct pt_regs * regs, unsigned reason) = &default_nmi_watchdog_tick;
+EXPORT_SYMBOL(nmi_watchdog_tick);
+
 static inline unsigned int get_nmi_count(int cpu)
 {
 	return per_cpu(irq_stat, cpu).__nmi_count;
@@ -387,7 +391,7 @@ void touch_nmi_watchdog(void)
 EXPORT_SYMBOL(touch_nmi_watchdog);
 
 notrace __kprobes int
-nmi_watchdog_tick(struct pt_regs *regs, unsigned reason)
+default_nmi_watchdog_tick(struct pt_regs *regs, unsigned reason)
 {
 	/*
 	 * Since current_thread_info()-> is always on the stack, and we

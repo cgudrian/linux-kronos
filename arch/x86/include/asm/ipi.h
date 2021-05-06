@@ -68,6 +68,9 @@ __default_send_IPI_shortcut(unsigned int shortcut, int vector, unsigned int dest
 	 * to the APIC.
 	 */
 	unsigned int cfg;
+	unsigned long flags;
+
+	local_irq_save_hw(flags);
 
 	/*
 	 * Wait for idle.
@@ -83,6 +86,8 @@ __default_send_IPI_shortcut(unsigned int shortcut, int vector, unsigned int dest
 	 * Send the IPI. The write to APIC_ICR fires this off.
 	 */
 	native_apic_mem_write(APIC_ICR, cfg);
+
+	local_irq_restore_hw(flags);
 }
 
 /*

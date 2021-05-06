@@ -65,6 +65,10 @@
 	thunk lockdep_sys_exit_thunk,lockdep_sys_exit
 #endif
 	
+#ifdef CONFIG_IPIPE
+	thunk_retrax __ipipe_syscall_root_thunk,__ipipe_syscall_root
+#endif
+	
 	/* SAVE_ARGS below is used only for the .cfi directives it contains. */
 	CFI_STARTPROC
 	SAVE_ARGS

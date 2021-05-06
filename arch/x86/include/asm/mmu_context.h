@@ -30,11 +30,14 @@ static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 #endif
 }
 
-static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
-			     struct task_struct *tsk)
+static inline void __switch_mm(struct mm_struct *prev, struct mm_struct *next,
+			       struct task_struct *tsk)
 {
 	unsigned cpu = smp_processor_id();
 
+#ifdef CONFIG_IPIPE_DEBUG_INTERNAL
+	WARN_ON_ONCE(!irqs_disabled_hw());
+#endif
 	if (likely(prev != next)) {
 		/* stop flush ipis for the previous mm */
 		cpumask_clear_cpu(cpu, mm_cpumask(prev));
@@ -70,10 +73,23 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 #endif
 }
 
+static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
+			     struct task_struct *tsk)
+{
+	unsigned long flags;
+	local_irq_save_hw_cond(flags);
+	__switch_mm(prev, next, tsk);
+	local_irq_restore_hw_cond(flags);
+}
+
+#define ipipe_mm_switch_protect(flags)	local_irq_save_hw_cond(flags)
+#define ipipe_mm_switch_unprotect(flags) \
+	local_irq_restore_hw_cond(flags)
+
 #define activate_mm(prev, next)			\
 do {						\
 	paravirt_activate_mm((prev), (next));	\
-	switch_mm((prev), (next), NULL);	\
+	__switch_mm((prev), (next), NULL);	\
 } while (0);
 
 #ifdef CONFIG_X86_32

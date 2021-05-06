@@ -50,7 +50,9 @@ EXPORT_SYMBOL(_write_trylock);
  * even on CONFIG_PREEMPT, because lockdep assumes that interrupts are
  * not re-enabled during lock-acquire (which the preempt-spin-ops do):
  */
-#if !defined(CONFIG_GENERIC_LOCKBREAK) || defined(CONFIG_DEBUG_LOCK_ALLOC)
+#if !defined(CONFIG_GENERIC_LOCKBREAK) || \
+  defined(CONFIG_DEBUG_LOCK_ALLOC) || \
+  defined(CONFIG_IPIPE)
 
 #ifndef _read_lock
 void __lockfunc _read_lock(rwlock_t *lock)
