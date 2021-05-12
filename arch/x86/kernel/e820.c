@@ -1259,6 +1259,8 @@ static int __init parse_memmap_opt(char *p)
 	if (!p)
 		return -EINVAL;
 
+	printk(KERN_INFO "ORIG Parse memmap - %s...\n", p);
+
 	if (!strncmp(p, "exactmap", 8)) {
 #ifdef CONFIG_CRASH_DUMP
 		/*
@@ -1268,6 +1270,7 @@ static int __init parse_memmap_opt(char *p)
 		 */
 		saved_max_pfn = e820_end_of_ram_pfn();
 #endif
+		printk("exact map...\n");
 		e820.nr_map = 0;
 		userdef = 1;
 		return 0;
