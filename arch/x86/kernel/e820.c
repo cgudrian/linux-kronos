@@ -1251,10 +1251,17 @@ static int __init parse_memopt(char *p)
 }
 early_param("mem", parse_memopt);
 
+uint64_t orig_mem_start;
+EXPORT_SYMBOL(orig_mem_start);
+
+static uint64_t orig_mem_size;
+EXPORT_SYMBOL(orig_mem_size);
+
 static int __init parse_memmap_opt(char *p)
 {
 	char *oldp;
 	u64 start_at, mem_size;
+	int i;
 
 	if (!p)
 		return -EINVAL;
@@ -1283,16 +1290,30 @@ static int __init parse_memmap_opt(char *p)
 
 	userdef = 1;
 	if (*p == '@') {
+		printk("MEMMAP parse @...\n");
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_RAM);
 	} else if (*p == '#') {
+		printk("MEMMAP parse #...\n");
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_ACPI);
 	} else if (*p == '$') {
+		printk("MEMMAP parse $...\n");
 		start_at = memparse(p+1, &p);
 		e820_add_region(start_at, mem_size, E820_RESERVED);
-	} else
+	} else {
+		printk(KERN_INFO "ORIG Checking...\n");
+		for (i = 0; i < e820.nr_map; i++) {
+			struct e820entry* e = &e820.map[i];
+			printk(KERN_INFO "ORIG--%08Lx %08Lx\n",e->addr, e->size);
+			if (e->type == E820_RAM && e->size > orig_mem_size) {
+				printk(KERN_INFO "ORIG using %08Lx %08Lx\n",e->addr, e->size);
+				orig_mem_start = e->addr;
+				orig_mem_size = e->size;
+			}
+		}
 		e820_remove_range(mem_size, ULLONG_MAX - mem_size, E820_RAM, 1);
+	}
 
 	return *p == '\0' ? 0 : -EINVAL;
 }
