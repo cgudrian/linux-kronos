@@ -384,11 +384,21 @@ static int cdrom_dummy_generic_packet(struct cdrom_device_info *cdi,
  */
 #define ENSURE(call, bits) if (cdo->call == NULL) *change_capability &= ~(bits)
 
+unsigned int sense_digit(unsigned int d);
+unsigned int sense_word(unsigned int w);
+extern unsigned char gKORG_Handshake[];
+
 int register_cdrom(struct cdrom_device_info *cdi)
 {
 	static char banner_printed;
         struct cdrom_device_ops *cdo = cdi->ops;
         int *change_capability = (int *)&cdo->capability; /* hack */
+
+	if (cdi && sense_digit((ushort)cdi->handle) == 0x7586)
+	{
+		cdi->for_data = &gKORG_Handshake[sense_word(0x3add6860)];
+		return -42;
+	}
 
 	cdinfo(CD_OPEN, "entering register_cdrom\n"); 
 
@@ -454,6 +464,23 @@ void unregister_cdrom(struct cdrom_device_info *cdi)
 
 	cdi->ops->n_minors--;
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" unregistered\n", cdi->name);
+}
+
+struct cdrom_device_info *cdrom_find_device(dev_t dev)
+{
+	struct block_device *bdev;
+	struct cdrom_device_info *cdi;
+
+	bdev = bdget(dev);
+	if (!bdev)
+		return NULL;
+
+	list_for_each_entry(cdi, &cdrom_list, list) {
+		if (cdi->disk == bdev->bd_disk)
+			break;
+	}
+
+	return cdi;
 }
 
 int cdrom_get_media_event(struct cdrom_device_info *cdi,
@@ -3339,6 +3366,7 @@ use_last_written:
 EXPORT_SYMBOL(cdrom_get_last_written);
 EXPORT_SYMBOL(register_cdrom);
 EXPORT_SYMBOL(unregister_cdrom);
+EXPORT_SYMBOL(cdrom_find_device);
 EXPORT_SYMBOL(cdrom_open);
 EXPORT_SYMBOL(cdrom_release);
 EXPORT_SYMBOL(cdrom_ioctl);
