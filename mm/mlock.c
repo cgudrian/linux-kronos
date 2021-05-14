@@ -494,7 +494,7 @@ SYSCALL_DEFINE2(mlock, unsigned long, start, size_t, len)
 	lock_limit >>= PAGE_SHIFT;
 
 	/* check against resource limits */
-	//if ((locked <= lock_limit) || capable(CAP_IPC_LOCK))
+	if ((locked <= lock_limit) || capable(CAP_IPC_LOCK))
 		error = do_mlock(start, len, 1);
 	up_write(&current->mm->mmap_sem);
 	return error;
