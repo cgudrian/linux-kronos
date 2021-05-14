@@ -1,6 +1,4 @@
-unsigned char gKORG_Handshake[20];
-
-unsigned int sense_digit(unsigned int d)
+unsigned int sense_digit(unsigned short d)
 {
 	return (d & 0x1c0) << 7 | (int)(d & 0xe000) >> 3 | (d & 7) << 7 | (d & 0x1e00) << 6 | (int)(d & 0x38) >> 3;
 }
