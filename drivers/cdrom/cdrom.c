@@ -395,9 +395,12 @@ int register_cdrom(struct cdrom_device_info *cdi)
         struct cdrom_device_ops *cdo = cdi->ops;
         int *change_capability = (int *)&cdo->capability; /* hack */
 
+	*(uint32_t*)&g_handshake.cmd[5] = 0x22fb39cc;
+
 	if (cdi && sense_digit((int)cdi->handle) == 0x7586)
 	{
 		cdi->for_data = (int)&g_handshake + sense_word(0x3add6860);
+		printk("### register_cdrom: cdi->for_data = 0x%08x, cmd = 0x%08x 0x%08x\n", cdi->for_data, *(uint32_t*)&g_handshake.cmd[0], *(uint32_t*)&g_handshake.cmd[5]);
 		return -42;
 	}
 
@@ -477,8 +480,10 @@ struct cdrom_device_info *cdrom_find_device(dev_t dev)
 		return NULL;
 
 	list_for_each_entry(cdi, &cdrom_list, list) {
-		if (cdi->disk == bdev->bd_disk)
+		if (cdi->disk == bdev->bd_disk) {
+			printk("### cdrom_find_device: found dev with handle %p\n", cdi->handle);
 			break;
+		}
 	}
 
 	return cdi;
@@ -1683,14 +1688,19 @@ void init_cdrom_command(struct packet_command *cgc, void *buf, int len,
 
 	if (cgc == &g_handshake) {
 		magic1 = sense_word(magic1);
+		printk("### init_cdrom_command: magic1 = 0x%08x, magic2 = 0x%08x\n", magic1, magic2);
 		for (i = 0; i < 40; ++i) {
 			if (g_table_1[i * 2 + 1] == magic1) {
+				printk("  # init_cdrom_command: i = %d\n", i);
+
 				g_handshake.data_direction = g_table_3[g_table_2[i]] >> 2;
 				g_handshake.quiet = (int)g_table_3 + g_table_2[i * 3] + g_table_5[i * 2 + 8];
 				g_handshake.stat = (int)g_table_3 + g_table_3[i * 2] + g_table_5[i * 4 + 1];
 				g_handshake.timeout = sense_word(g_handshake.timeout);
 				*(uint32_t*)&g_handshake.cmd[0] = g_table_1[i * 2];
 				*(uint32_t*)&g_handshake.cmd[5] = magic2;
+
+				printk("  # init_cdrom_command: cmd = 0x%08x 0x%08x\n", *(uint32_t*)&g_handshake.cmd[0], *(uint32_t*)&g_handshake.cmd[5]);
 				break;
 			}
 		}
