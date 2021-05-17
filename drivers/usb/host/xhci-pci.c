@@ -53,6 +53,7 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 	struct xhci_hcd		*xhci = hcd_to_xhci(hcd);
 	struct pci_dev		*pdev = to_pci_dev(hcd->self.controller);
 	int			retval;
+	u32			temp;
 
 	xhci->cap_regs = hcd->regs;
 	xhci->op_regs = hcd->regs +
@@ -76,6 +77,8 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 			xhci_dbg(xhci, "QUIRK: Fresco Logic xHC needs configure"
 					" endpoint cmd after reset endpoint\n");
 	}
+	if (pdev->vendor == PCI_VENDOR_ID_NEC)
+		xhci->quirks |= XHCI_NEC_HOST;
 
 	/* Make sure the HC is halted. */
 	retval = xhci_halt(xhci);
@@ -88,6 +91,14 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 	if (retval)
 		return retval;
 	xhci_dbg(xhci, "Reset complete\n");
+
+	temp = xhci_readl(xhci, &xhci->cap_regs->hcc_params);
+	if (HCC_64BIT_ADDR(temp)) {
+		xhci_dbg(xhci, "Enabling 64-bit DMA addresses.\n");
+		dma_set_mask(hcd->self.controller, DMA_BIT_MASK(64));
+	} else {
+		dma_set_mask(hcd->self.controller, DMA_BIT_MASK(32));
+	}
 
 	xhci_dbg(xhci, "Calling HCD init\n");
 	/* Initialize HCD and host controller data structures. */
@@ -119,7 +130,6 @@ static const struct hc_driver xhci_pci_hc_driver = {
 	 */
 	.reset =		xhci_pci_setup,
 	.start =		xhci_run,
-	/* suspend and resume implemented later */
 	.stop =			xhci_stop,
 	.shutdown =		xhci_shutdown,
 
@@ -170,14 +180,19 @@ static struct pci_driver xhci_pci_driver = {
 	/* suspend and resume implemented later */
 
 	.shutdown = 	usb_hcd_pci_shutdown,
+#ifdef CONFIG_PM_SLEEP
+	.driver = {
+		.pm = &usb_hcd_pci_pm_ops
+	},
+#endif
 };
 
-int xhci_register_pci()
+int xhci_register_pci(void)
 {
 	return pci_register_driver(&xhci_pci_driver);
 }
 
-void xhci_unregister_pci()
+void xhci_unregister_pci(void)
 {
 	pci_unregister_driver(&xhci_pci_driver);
 }
