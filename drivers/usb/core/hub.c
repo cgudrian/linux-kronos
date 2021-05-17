@@ -2554,10 +2554,10 @@ static int hub_set_address(struct usb_device *udev, int devnum)
 		retval = usb_control_msg(udev, usb_sndaddr0pipe(),
 				USB_REQ_SET_ADDRESS, 0, devnum, 0,
 				NULL, 0, USB_CTRL_SET_TIMEOUT);
-		if (retval == 0)
-			update_address(udev, devnum);
 	}
+
 	if (retval == 0) {
+		update_address(udev, devnum);
 		/* Device now using proper address. */
 		usb_set_device_state(udev, USB_STATE_ADDRESS);
 		usb_ep0_reinit(udev);
@@ -2604,14 +2604,7 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 
 	mutex_lock(&usb_address0_mutex);
 
-	if ((hcd->driver->flags & HCD_USB3) && udev->config) {
-		/* FIXME this will need special handling by the xHCI driver. */
-		dev_dbg(&udev->dev,
-				"xHCI reset of configured device "
-				"not supported yet.\n");
-		retval = -EINVAL;
-		goto fail;
-	} else if (!udev->config && oldspeed == USB_SPEED_SUPER) {
+	if (!udev->config && oldspeed == USB_SPEED_SUPER) {
 		/* Don't reset USB 3.0 devices during an initial setup */
 		usb_set_device_state(udev, USB_STATE_DEFAULT);
 	} else {
@@ -3049,13 +3042,10 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 		 * xHCI needs to issue an address device command later
 		 * in the hub_port_init sequence for SS/HS/FS/LS devices.
 		 */
-		if (!(hcd->driver->flags & HCD_USB3)) {
-			/* set the address */
-			choose_address(udev);
-			if (udev->devnum <= 0) {
-				status = -ENOTCONN;	/* Don't retry */
-				goto loop;
-			}
+		choose_address(udev);
+		if (udev->devnum <= 0) {
+			status = -ENOTCONN;	/* Don't retry */
+			goto loop;
 		}
 
 		/* reset (non-USB 3.0 devices) and get descriptor */

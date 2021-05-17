@@ -1654,7 +1654,7 @@ int usb_hcd_check_bandwidth(struct usb_device *udev,
 			 */
 			intf_cache = new_config->intf_cache[i];
 			for (j = 0; j < intf_cache->num_altsetting; j++) {
-				if (intf_cache->altsetting[j].desc.bAlternateSetting == 0)
+				if ((intf_cache->altsetting[j].desc.bAlternateSetting == 0) || (intf_cache->altsetting[j].desc.bAlternateSetting == 1))
 					alt = &intf_cache->altsetting[j];
 			}
 			if (!alt) {
