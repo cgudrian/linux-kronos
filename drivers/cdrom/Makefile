@@ -5,7 +5,7 @@
 
 # Each configuration option enables a list of files.
 
-obj-$(CONFIG_BLK_DEV_IDECD)	+=              cdrom.o korg_handshake.o
+obj-$(CONFIG_BLK_DEV_IDECD)	+=              cdrom.o
 obj-$(CONFIG_BLK_DEV_SR)	+=              cdrom.o
 obj-$(CONFIG_PARIDE_PCD)	+=		cdrom.o
 obj-$(CONFIG_CDROM_PKTCDVD)	+=		cdrom.o
