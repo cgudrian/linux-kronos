@@ -348,6 +348,19 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-delete-null-pointer-checks
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 
+KBUILD_CFLAGS += $(call cc-option, -fno-pie)
+KBUILD_AFLAGS += $(call cc-option, -fno-pie)
+
+KBUILD_CFLAGS += $(call cc-option, -Wno-pointer-sign)
+KBUILD_CFLAGS += $(call cc-option, -Wno-unused-function)
+KBUILD_CFLAGS += $(call cc-option, -Wno-attributes)
+KBUILD_CFLAGS += $(call cc-option, -Wno-unused-but-set-variable)
+
+KBUILD_AFLAGS += $(call cc-option, -Wno-pointer-sign)
+KBUILD_AFLAGS += $(call cc-option, -Wno-unused-function)
+KBUILD_AFLAGS += $(call cc-option, -Wno-attributes)
+KBUILD_AFLAGS += $(call cc-option, -Wno-unused-but-set-variable)
+
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
 KERNELRELEASE = $(shell cat include/config/kernel.release 2> /dev/null)
 KERNELVERSION = $(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
