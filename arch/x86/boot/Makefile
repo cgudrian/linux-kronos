@@ -55,31 +55,20 @@ $(obj)/cpustr.h: $(obj)/mkcpustr FORCE
 
 # ---------------------------------------------------------------------------
 
-# For gcc stack alignment is specified with -mpreferred-stack-boundary,
-# clang has the option -mstack-alignment for that purpose.
-ifneq ($(call cc-option, -mpreferred-stack-boundary=4),)
-      cc_stack_align4 := -mpreferred-stack-boundary=2
-      cc_stack_align8 := -mpreferred-stack-boundary=3
-else ifneq ($(call cc-option, -mstack-alignment=16),)
-      cc_stack_align4 := -mstack-alignment=4
-      cc_stack_align8 := -mstack-alignment=8
-endif
-# How to compile the 16-bit code.  Note we always compile for -march=i386;
-# that way we can complain to the user if the CPU is insufficient.
-REALMODE_CFLAGS	:= -m16 -g -Os -DDISABLE_BRANCH_PROFILING \
-		   -Wall -Wstrict-prototypes -march=i386 -mregparm=3 \
-		   -fno-strict-aliasing -fomit-frame-pointer -fno-pic \
-		   -mno-mmx -mno-sse $(call cc-option,-fcf-protection=none)
-
-REALMODE_CFLAGS += -ffreestanding
-REALMODE_CFLAGS += -fno-stack-protector
-REALMODE_CFLAGS += -Wno-address-of-packed-member
-REALMODE_CFLAGS += $(cc_stack_align4)
-REALMODE_CFLAGS += $(CLANG_FLAGS)
-
 # How to compile the 16-bit code.  Note we always compile for -march=i386,
 # that way we can complain to the user if the CPU is insufficient.
-KBUILD_CFLAGS	:= $(REALMODE_CFLAGS) -D_SETUP -D__KERNEL__
+KBUILD_CFLAGS	:= $(LINUXINCLUDE) -g -Os -D_SETUP -D__KERNEL__ \
+		   -DDISABLE_BRANCH_PROFILING \
+		   -Wall -Wstrict-prototypes \
+		   -march=i386 -mregparm=3 \
+		   -include $(srctree)/$(src)/code16gcc.h \
+		   -fno-strict-aliasing -fomit-frame-pointer \
+		   $(call cc-option, -ffreestanding) \
+		   $(call cc-option, -fno-toplevel-reorder,\
+			$(call cc-option, -fno-unit-at-a-time)) \
+		   $(call cc-option, -fno-stack-protector) \
+		   $(call cc-option, -mpreferred-stack-boundary=2)
+KBUILD_CFLAGS	+= $(call cc-option, -m32)
 KBUILD_AFLAGS	:= $(KBUILD_CFLAGS) -D__ASSEMBLY__
 GCOV_PROFILE := n
 
