@@ -130,7 +130,6 @@ struct pt_regs {
 #ifdef __KERNEL__
 
 #include <linux/init.h>
-#include <linux/linkage.h>
 
 struct cpuinfo_x86;
 struct task_struct;
@@ -143,8 +142,8 @@ extern void send_sigtrap(struct task_struct *tsk, struct pt_regs *regs,
 			 int error_code, int si_code);
 void signal_fault(struct pt_regs *regs, void __user *frame, char *where);
 
-extern asmregparm long syscall_trace_enter(struct pt_regs *);
-extern asmregparm void syscall_trace_leave(struct pt_regs *);
+extern long syscall_trace_enter(struct pt_regs *);
+extern void syscall_trace_leave(struct pt_regs *);
 
 static inline unsigned long regs_return_value(struct pt_regs *regs)
 {

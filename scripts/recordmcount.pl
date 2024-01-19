@@ -179,7 +179,7 @@ if ($arch eq "x86_64") {
     $alignment = 4;
 
     # force flags for this arch
-    $ld .= " -m32";
+    $ld .= " -m elf_i386";
     $objdump .= " -M i386";
     $objcopy .= " -O elf32-i386";
     $cc .= " -m32";
