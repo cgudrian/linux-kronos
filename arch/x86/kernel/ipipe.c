@@ -1040,7 +1040,7 @@ void *ipipe_irq_handler = __ipipe_handle_irq;
 EXPORT_SYMBOL(ipipe_irq_handler);
 EXPORT_SYMBOL(io_apic_irqs);
 EXPORT_PER_CPU_SYMBOL(__ipipe_tick_regs);
-void do_notify_resume(struct pt_regs *, void *, __u32);
+__attribute__((regparm(3))) void do_notify_resume(struct pt_regs *, void *, __u32);
 EXPORT_SYMBOL(do_notify_resume);
 extern void *sys_call_table;
 EXPORT_SYMBOL(sys_call_table);

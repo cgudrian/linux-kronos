@@ -7,9 +7,9 @@
   following trick can be applied to create the resulting binary:
 
 
-  ld -m32  --format binary --oformat elf32-i386 -r \
+  ld -m elf_i386  --format binary --oformat elf32-i386 -r \
   -T initramfs_data.scr initramfs_data.cpio.gz -o initramfs_data.o
-   ld -m32  -r -o built-in.o initramfs_data.o
+   ld -m elf_i386  -r -o built-in.o initramfs_data.o
 
   initramfs_data.scr looks like this:
 SECTIONS
