@@ -12,6 +12,20 @@ endif
 # e.g.: obj-y += foo_$(BITS).o
 export BITS
 
+# How to compile the 16-bit code.  Note we always compile for -march=i386;
+# that way we can complain to the user if the CPU is insufficient.
+REALMODE_CFLAGS	:= -std=gnu11 -m16 -g -Os -DDISABLE_BRANCH_PROFILING -D__DISABLE_EXPORTS \
+		   -Wall -Wstrict-prototypes -march=i386 -mregparm=3 \
+		   -fno-strict-aliasing -fomit-frame-pointer -fno-pic \
+		   -mno-mmx -mno-sse $(call cc-option,-fcf-protection=none)
+
+REALMODE_CFLAGS += -ffreestanding
+REALMODE_CFLAGS += -fno-stack-protector
+REALMODE_CFLAGS += -Wno-address-of-packed-member
+REALMODE_CFLAGS += -mpreferred-stack-boundary=2
+export REALMODE_CFLAGS
+
+
 ifeq ($(CONFIG_X86_32),y)
         BITS := 32
         UTS_MACHINE := i386
@@ -26,6 +40,15 @@ ifeq ($(CONFIG_X86_32),y)
         endif
 
         KBUILD_CFLAGS += -msoft-float -mregparm=3 -freg-struct-return
+
+        # Never want PIC in a 32-bit kernel, prevent breakage with GCC built
+        # with nonstandard options
+        KBUILD_CFLAGS += -fno-pic
+
+        # We must build the kernel with MATOM defined for the
+        # precompiled kernel modules to work. This makes newer GCC
+        # version emit code that doesn't run on qemu.
+        KBUILD_CFLAGS += $(call cc-option,-mno-movbe)
 
         # prevent gcc from keeping the stack 16 byte aligned
         KBUILD_CFLAGS += $(call cc-option,-mpreferred-stack-boundary=2)
