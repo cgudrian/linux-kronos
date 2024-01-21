@@ -5,6 +5,7 @@
 #include <linux/types.h>
 #include <linux/time.h>
 #include <linux/compiler.h>
+#include <asm/linkage.h>
 
 /* Avoid too many header ordering problems.  */
 struct siginfo;
@@ -122,7 +123,7 @@ typedef unsigned long sigset_t;
 #ifndef __ASSEMBLY__
 
 # ifdef __KERNEL__
-extern void do_notify_resume(struct pt_regs *, void *, __u32);
+extern asmregparm void do_notify_resume(struct pt_regs *, void *, __u32);
 # endif /* __KERNEL__ */
 
 #ifdef __i386__

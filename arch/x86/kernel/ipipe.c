@@ -37,6 +37,7 @@
 #include <asm/irq.h>
 #include <asm/desc.h>
 #include <asm/io.h>
+#include <asm/linkage.h>
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/tlbflush.h>
 #include <asm/fixmap.h>
@@ -1040,7 +1041,7 @@ void *ipipe_irq_handler = __ipipe_handle_irq;
 EXPORT_SYMBOL(ipipe_irq_handler);
 EXPORT_SYMBOL(io_apic_irqs);
 EXPORT_PER_CPU_SYMBOL(__ipipe_tick_regs);
-__attribute__((regparm(3))) void do_notify_resume(struct pt_regs *, void *, __u32);
+asmregparm void do_notify_resume(struct pt_regs *, void *, __u32);
 EXPORT_SYMBOL(do_notify_resume);
 extern void *sys_call_table;
 EXPORT_SYMBOL(sys_call_table);
