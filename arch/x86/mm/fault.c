@@ -1,4 +1,3 @@
-
 /*
  *  Copyright (C) 1995  Linus Torvalds
  *  Copyright (C) 2001, 2002 Andi Kleen, SuSE Labs.
@@ -324,9 +323,43 @@ out:
 
 #else /* CONFIG_X86_64: */
 
-static inline int vmalloc_sync_one(pgd_t *pgd, unsigned long address)
+void vmalloc_sync_all(void)
 {
-	pgd_t *pgd_ref;
+	unsigned long address;
+
+	for (address = VMALLOC_START & PGDIR_MASK; address <= VMALLOC_END;
+	     address += PGDIR_SIZE) {
+
+		const pgd_t *pgd_ref = pgd_offset_k(address);
+		unsigned long flags;
+		struct page *page;
+
+		if (pgd_none(*pgd_ref))
+			continue;
+
+		spin_lock_irqsave(&pgd_lock, flags);
+		list_for_each_entry(page, &pgd_list, lru) {
+			pgd_t *pgd;
+			pgd = (pgd_t *)page_address(page) + pgd_index(address);
+			if (pgd_none(*pgd))
+				set_pgd(pgd, *pgd_ref);
+			else
+				BUG_ON(pgd_page_vaddr(*pgd) != pgd_page_vaddr(*pgd_ref));
+		}
+		spin_unlock_irqrestore(&pgd_lock, flags);
+	}
+}
+
+/*
+ * 64-bit:
+ *
+ *   Handle a fault on the vmalloc area
+ *
+ * This assumes no large pages in there.
+ */
+static noinline int vmalloc_fault(unsigned long address)
+{
+	pgd_t *pgd, *pgd_ref;
 	pud_t *pud, *pud_ref;
 	pmd_t *pmd, *pmd_ref;
 	pte_t *pte, *pte_ref;
@@ -340,6 +373,7 @@ static inline int vmalloc_sync_one(pgd_t *pgd, unsigned long address)
 	 * happen within a race in page table update. In the later
 	 * case just flush:
 	 */
+	pgd = pgd_offset(current->active_mm, address);
 	pgd_ref = pgd_offset_k(address);
 	if (pgd_none(*pgd_ref))
 		return -1;
@@ -385,46 +419,6 @@ static inline int vmalloc_sync_one(pgd_t *pgd, unsigned long address)
 		BUG();
 
 	return 0;
-}
-
-void vmalloc_sync_all(void)
-{
-	unsigned long address;
-
-	for (address = VMALLOC_START & PGDIR_MASK; address <= VMALLOC_END;
-	     address += PGDIR_SIZE) {
-
-		const pgd_t *pgd_ref = pgd_offset_k(address);
-		unsigned long flags;
-		struct page *page;
-
-		if (pgd_none(*pgd_ref))
-			continue;
-
-		spin_lock_irqsave(&pgd_lock, flags);
-		list_for_each_entry(page, &pgd_list, lru) {
-			pgd_t *pgd;
-			pgd = (pgd_t *)page_address(page) + pgd_index(address);
-			if (pgd_none(*pgd))
-				set_pgd(pgd, *pgd_ref);
-			else
-				BUG_ON(pgd_page_vaddr(*pgd) != pgd_page_vaddr(*pgd_ref));
-		}
-		spin_unlock_irqrestore(&pgd_lock, flags);
-	}
-}
-
-/*
- * 64-bit:
- *
- *   Handle a fault on the vmalloc area
- *
- * This assumes no large pages in there.
- */
-static noinline int vmalloc_fault(unsigned long address)
-{
-	pgd_t *pgd = pgd = pgd_offset(current->active_mm, address);
-	return vmalloc_sync_one(pgd, address);
 }
 
 static const char errata93_warning[] =
@@ -964,9 +958,6 @@ do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	/* Get the faulting address: */
 	address = read_cr2();
 
-	if (!__ipipe_pipeline_head_p(ipipe_root_domain))
-		local_irq_enable_hw_cond();
-
 	/*
 	 * Detect and handle instructions that would cause a page fault for
 	 * both a tracked kernel page and a userspace page.
@@ -1146,43 +1137,3 @@ good_area:
 
 	up_read(&mm->mmap_sem);
 }
-
-#ifdef CONFIG_IPIPE
-void __ipipe_pin_range_globally(unsigned long start, unsigned long end)
-{
-#ifdef CONFIG_X86_32
-	unsigned long next, addr = start;
-
-	do {
-		unsigned long flags;
-		struct page *page;
-
-		next = pgd_addr_end(addr, end);
-		spin_lock_irqsave(&pgd_lock, flags);
-		list_for_each_entry(page, &pgd_list, lru)
-			vmalloc_sync_one(page_address(page), addr);
-		spin_unlock_irqrestore(&pgd_lock, flags);
-
-	} while (addr = next, addr != end);
-#else
-	unsigned long next, addr = start;
-	int ret = 0;
-
-	do {
-		struct page *page;
-
-		next = pgd_addr_end(addr, end);
-		spin_lock(&pgd_lock);
-		list_for_each_entry(page, &pgd_list, lru) {
-			pgd_t *pgd;
-			pgd = (pgd_t *)page_address(page) + pgd_index(addr);
-			ret = vmalloc_sync_one(pgd, addr);
-			if (ret)
-				break;
-		}
-		spin_unlock(&pgd_lock);
-		addr = next;
-	} while (!ret && addr != end);
-#endif
-}
-#endif /* CONFIG_IPIPE */

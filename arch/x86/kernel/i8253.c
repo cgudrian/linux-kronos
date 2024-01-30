@@ -11,7 +11,6 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/io.h>
-#include <linux/ipipe.h>
 
 #include <asm/i8253.h>
 #include <asm/hpet.h>
@@ -130,12 +129,6 @@ static cycle_t pit_read(struct clocksource *cs)
 	unsigned long flags;
 	int count;
 	u32 jifs;
-
-#ifdef CONFIG_IPIPE
-	if (!__ipipe_pipeline_head_p(ipipe_root_domain))
-		/* We don't really own the PIT. */
-		return (cycle_t)(jiffies * LATCH) + (LATCH - 1) - old_count;
-#endif /* CONFIG_IPIPE */
 
 	spin_lock_irqsave(&i8253_lock, flags);
 	/*

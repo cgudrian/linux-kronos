@@ -305,12 +305,10 @@ start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
 	regs->cs		= __USER_CS;
 	regs->ip		= new_ip;
 	regs->sp		= new_sp;
-#ifndef CONFIG_IPIPE	/* Lazily handled, init_fpu() will reset the state. */
 	/*
 	 * Free the old FP and other extended state
 	 */
 	free_thread_xstate(current);
-#endif
 }
 EXPORT_SYMBOL_GPL(start_thread);
 
@@ -347,7 +345,7 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 {
 	struct thread_struct *prev = &prev_p->thread,
 				 *next = &next_p->thread;
-	int cpu = raw_smp_processor_id();
+	int cpu = smp_processor_id();
 	struct tss_struct *tss = &per_cpu(init_tss, cpu);
 	bool preload_fpu;
 

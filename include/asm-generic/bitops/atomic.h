@@ -21,20 +21,20 @@ extern raw_spinlock_t __atomic_hash[ATOMIC_HASH_SIZE] __lock_aligned;
  * this is the substitute */
 #define _atomic_spin_lock_irqsave(l,f) do {	\
 	raw_spinlock_t *s = ATOMIC_HASH(l);	\
-	local_irq_save_hw(f);			\
+	local_irq_save(f);			\
 	__raw_spin_lock(s);			\
 } while(0)
 
 #define _atomic_spin_unlock_irqrestore(l,f) do {	\
 	raw_spinlock_t *s = ATOMIC_HASH(l);		\
 	__raw_spin_unlock(s);				\
-	local_irq_restore_hw(f);			\
+	local_irq_restore(f);				\
 } while(0)
 
 
 #else
-#  define _atomic_spin_lock_irqsave(l,f) do { local_irq_save_hw(f); } while (0)
-#  define _atomic_spin_unlock_irqrestore(l,f) do { local_irq_restore_hw(f); } while (0)
+#  define _atomic_spin_lock_irqsave(l,f) do { local_irq_save(f); } while (0)
+#  define _atomic_spin_unlock_irqrestore(l,f) do { local_irq_restore(f); } while (0)
 #endif
 
 /*

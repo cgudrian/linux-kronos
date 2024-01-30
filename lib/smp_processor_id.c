@@ -12,13 +12,10 @@ notrace unsigned int debug_smp_processor_id(void)
 	unsigned long preempt_count = preempt_count();
 	int this_cpu = raw_smp_processor_id();
 
-	if (!ipipe_root_domain_p)
-		goto out;
-
 	if (likely(preempt_count))
 		goto out;
 
-	if (irqs_disabled() || irqs_disabled_hw())
+	if (irqs_disabled())
 		goto out;
 
 	/*

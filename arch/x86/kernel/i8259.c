@@ -32,7 +32,7 @@
  */
 
 static int i8259A_auto_eoi;
-IPIPE_DEFINE_SPINLOCK(i8259A_lock);
+DEFINE_SPINLOCK(i8259A_lock);
 static void mask_and_ack_8259A(unsigned int);
 
 struct irq_chip i8259A_chip = {
@@ -69,7 +69,6 @@ void disable_8259A_irq(unsigned int irq)
 	unsigned long flags;
 
 	spin_lock_irqsave(&i8259A_lock, flags);
-	ipipe_irq_lock(irq);
 	cached_irq_mask |= mask;
 	if (irq & 8)
 		outb(cached_slave_mask, PIC_SLAVE_IMR);
@@ -80,18 +79,15 @@ void disable_8259A_irq(unsigned int irq)
 
 void enable_8259A_irq(unsigned int irq)
 {
-	unsigned int mask = (1 << irq);
+	unsigned int mask = ~(1 << irq);
 	unsigned long flags;
 
 	spin_lock_irqsave(&i8259A_lock, flags);
-	if (cached_irq_mask & mask) {
-		cached_irq_mask &= ~mask;
-		if (irq & 8)
-			outb(cached_slave_mask, PIC_SLAVE_IMR);
-		else
-			outb(cached_master_mask, PIC_MASTER_IMR);
-		ipipe_irq_unlock(irq);
-	}
+	cached_irq_mask &= mask;
+	if (irq & 8)
+		outb(cached_slave_mask, PIC_SLAVE_IMR);
+	else
+		outb(cached_master_mask, PIC_MASTER_IMR);
 	spin_unlock_irqrestore(&i8259A_lock, flags);
 }
 
@@ -172,18 +168,6 @@ static void mask_and_ack_8259A(unsigned int irq)
 	 */
 	if (cached_irq_mask & irqmask)
 		goto spurious_8259A_irq;
-#ifdef CONFIG_IPIPE
-	if (irq == 0) {
-		/*
-		 * Fast timer ack -- don't mask (unless supposedly
-		 * spurious). We trace outb's in order to detect
-		 * broken hardware inducing large delays.
-		 */
-		outb(0x60, PIC_MASTER_CMD);	/* Specific EOI to master. */
-		spin_unlock_irqrestore(&i8259A_lock, flags);
-		return;
-	}
-#endif /* CONFIG_IPIPE */
 	cached_irq_mask |= irqmask;
 
 handle_real_irq:

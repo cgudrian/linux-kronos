@@ -35,15 +35,7 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 			return -ENOMEM;
 		WARN_ON((unsigned long)dst->thread.xstate & 15);
 		memcpy(dst->thread.xstate, src->thread.xstate, xstate_size);
-	} else {
-#ifdef CONFIG_IPIPE
-		dst->thread.xstate = kmem_cache_alloc(task_xstate_cachep,
-						      GFP_KERNEL);
-		if (!dst->thread.xstate)
-			return -ENOMEM;
-#endif
 	}
-
 	return 0;
 }
 
@@ -69,10 +61,6 @@ void arch_task_cache_init(void)
         	kmem_cache_create("task_xstate", xstate_size,
 				  __alignof__(union thread_xstate),
 				  SLAB_PANIC | SLAB_NOTRACK, NULL);
-#ifdef CONFIG_IPIPE
-	current->thread.xstate = kmem_cache_alloc(task_xstate_cachep,
-						  GFP_KERNEL);
-#endif
 }
 
 /*
@@ -321,7 +309,7 @@ EXPORT_SYMBOL(default_idle);
 
 void stop_this_cpu(void *dummy)
 {
-	local_irq_disable_hw();
+	local_irq_disable();
 	/*
 	 * Remove this CPU:
 	 */
@@ -546,11 +534,6 @@ static void c1e_idle(void)
 
 void __cpuinit select_idle_routine(const struct cpuinfo_x86 *c)
 {
-#ifdef CONFIG_IPIPE
-#define default_to_mwait force_mwait
-#else
-#define default_to_mwait 1
-#endif
 #ifdef CONFIG_SMP
 	if (pm_idle == poll_idle && smp_num_siblings > 1) {
 		printk(KERN_WARNING "WARNING: polling idle and HT enabled,"
@@ -560,7 +543,7 @@ void __cpuinit select_idle_routine(const struct cpuinfo_x86 *c)
 	if (pm_idle)
 		return;
 
-	if (default_to_mwait && cpu_has(c, X86_FEATURE_MWAIT) && mwait_usable(c)) {
+	if (cpu_has(c, X86_FEATURE_MWAIT) && mwait_usable(c)) {
 		/*
 		 * One CPU supports mwait => All CPUs supports mwait
 		 */

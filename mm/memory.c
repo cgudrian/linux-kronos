@@ -56,7 +56,6 @@
 #include <linux/kallsyms.h>
 #include <linux/swapops.h>
 #include <linux/elf.h>
-#include <linux/vmalloc.h>
 
 #include <asm/io.h>
 #include <asm/pgalloc.h>
@@ -567,32 +566,6 @@ out:
 	return pfn_to_page(pfn);
 }
 
-static inline void cow_user_page(struct page *dst, struct page *src, unsigned long va, struct vm_area_struct *vma)
-{
-	/*
-	 * If the source page was a PFN mapping, we don't have
-	 * a "struct page" for it. We do a best-effort copy by
-	 * just copying from the original user address. If that
-	 * fails, we just zero-fill it. Live with it.
-	 */
-	if (unlikely(!src)) {
-		void *kaddr = kmap_atomic(dst, KM_USER0);
-		void __user *uaddr = (void __user *)(va & PAGE_MASK);
-
-		/*
-		 * This really shouldn't fail, because the page is there
-		 * in the page tables. But it might just be unreadable,
-		 * in which case we just give up and fill the result with
-		 * zeroes.
-		 */
-		if (__copy_from_user_inatomic(kaddr, uaddr, PAGE_SIZE))
-			memset(kaddr, 0, PAGE_SIZE);
-		kunmap_atomic(kaddr, KM_USER0);
-		flush_dcache_page(dst);
-	} else
-		copy_user_highpage(dst, src, va, vma);
-}
-
 /*
  * copy one vm_area from one task to the other. Assumes the page tables
  * already present in the new task to be cleared in the whole range
@@ -601,8 +574,8 @@ static inline void cow_user_page(struct page *dst, struct page *src, unsigned lo
 
 static inline void
 copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
-	     pte_t *dst_pte, pte_t *src_pte, struct vm_area_struct *vma,
-	     unsigned long addr, int *rss, struct page *uncow_page)
+		pte_t *dst_pte, pte_t *src_pte, struct vm_area_struct *vma,
+		unsigned long addr, int *rss)
 {
 	unsigned long vm_flags = vma->vm_flags;
 	pte_t pte = *src_pte;
@@ -641,21 +614,6 @@ copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	 * in the parent and the child
 	 */
 	if (is_cow_mapping(vm_flags)) {
-#ifdef CONFIG_IPIPE
-		if (uncow_page) {
-			struct page *old_page = vm_normal_page(vma, addr, pte);
-			cow_user_page(uncow_page, old_page, addr, vma);
-			pte = mk_pte(uncow_page, vma->vm_page_prot);
-
-			if (vm_flags & VM_SHARED)
-				pte = pte_mkclean(pte);
-			pte = pte_mkold(pte);
-
-			page_add_new_anon_rmap(uncow_page, vma, addr);
-			rss[!!PageAnon(uncow_page)]++;
-			goto out_set_pte;
-		}
-#endif /* CONFIG_IPIPE */
 		ptep_set_wrprotect(src_mm, addr, src_pte);
 		pte = pte_wrprotect(pte);
 	}
@@ -687,27 +645,13 @@ static int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	pte_t *src_pte, *dst_pte;
 	spinlock_t *src_ptl, *dst_ptl;
 	int progress = 0;
-	struct page *uncow_page = NULL;
 	int rss[2];
-#ifdef CONFIG_IPIPE
-	int do_cow_break = 0;
+
 again:
-	if (do_cow_break) {
-		uncow_page = alloc_page_vma(GFP_HIGHUSER, vma, addr);
-		if (!uncow_page)
-			return -ENOMEM;
-		do_cow_break = 0;
-	}
-#else
-again:
-#endif
 	rss[1] = rss[0] = 0;
 	dst_pte = pte_alloc_map_lock(dst_mm, dst_pmd, addr, &dst_ptl);
-	if (!dst_pte) {
-		if (uncow_page)
-			page_cache_release(uncow_page);
+	if (!dst_pte)
 		return -ENOMEM;
-	}
 	src_pte = pte_offset_map_nested(src_pmd, addr);
 	src_ptl = pte_lockptr(src_mm, src_pmd);
 	spin_lock_nested(src_ptl, SINGLE_DEPTH_NESTING);
@@ -730,25 +674,7 @@ again:
 			progress++;
 			continue;
 		}
-#ifdef CONFIG_IPIPE
-		if (likely(uncow_page == NULL) && likely(pte_present(*src_pte))) {
-			if (is_cow_mapping(vma->vm_flags) &&
-			    test_bit(MMF_VM_PINNED, &src_mm->flags) &&
-			    ((vma->vm_flags|src_mm->def_flags) & VM_LOCKED)) {
-				arch_leave_lazy_mmu_mode();
-				spin_unlock(src_ptl);
-				pte_unmap_nested(src_pte);
-				add_mm_rss(dst_mm, rss[0], rss[1]);
-				pte_unmap_unlock(dst_pte, dst_ptl);
-				cond_resched();
-				do_cow_break = 1;
-				goto again;
-			}
-		}
-#endif
-		copy_one_pte(dst_mm, src_mm, dst_pte,
-			     src_pte, vma, addr, rss, uncow_page);
-		uncow_page = NULL;
+		copy_one_pte(dst_mm, src_mm, dst_pte, src_pte, vma, addr, rss);
 		progress += 8;
 	} while (dst_pte++, src_pte++, addr += PAGE_SIZE, addr != end);
 
@@ -2013,6 +1939,32 @@ static inline pte_t maybe_mkwrite(pte_t pte, struct vm_area_struct *vma)
 	if (likely(vma->vm_flags & VM_WRITE))
 		pte = pte_mkwrite(pte);
 	return pte;
+}
+
+static inline void cow_user_page(struct page *dst, struct page *src, unsigned long va, struct vm_area_struct *vma)
+{
+	/*
+	 * If the source page was a PFN mapping, we don't have
+	 * a "struct page" for it. We do a best-effort copy by
+	 * just copying from the original user address. If that
+	 * fails, we just zero-fill it. Live with it.
+	 */
+	if (unlikely(!src)) {
+		void *kaddr = kmap_atomic(dst, KM_USER0);
+		void __user *uaddr = (void __user *)(va & PAGE_MASK);
+
+		/*
+		 * This really shouldn't fail, because the page is there
+		 * in the page tables. But it might just be unreadable,
+		 * in which case we just give up and fill the result with
+		 * zeroes.
+		 */
+		if (__copy_from_user_inatomic(kaddr, uaddr, PAGE_SIZE))
+			memset(kaddr, 0, PAGE_SIZE);
+		kunmap_atomic(kaddr, KM_USER0);
+		flush_dcache_page(dst);
+	} else
+		copy_user_highpage(dst, src, va, vma);
 }
 
 /*
@@ -3424,112 +3376,4 @@ void might_fault(void)
 		might_lock_read(&current->mm->mmap_sem);
 }
 EXPORT_SYMBOL(might_fault);
-#endif
-
-#ifdef CONFIG_IPIPE
-
-static inline int ipipe_pin_pte_range(struct mm_struct *mm, pmd_t *pmd,
-				      struct vm_area_struct *vma,
-				      unsigned long addr, unsigned long end)
-{
-	spinlock_t *ptl;
-	pte_t *pte;
-
-	do {
-		pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
-		if (!pte)
-			continue;
-
-		if (!pte_present(*pte) || pte_write(*pte)) {
-			pte_unmap_unlock(pte, ptl);
-			continue;
-		}
-
-		if (do_wp_page(mm, vma, addr, pte, pmd, ptl, *pte) == VM_FAULT_OOM)
-			return -ENOMEM;
-	} while (addr += PAGE_SIZE, addr != end);
-	return 0;
-}
-
-static inline int ipipe_pin_pmd_range(struct mm_struct *mm, pud_t *pud,
-				      struct vm_area_struct *vma,
-				      unsigned long addr, unsigned long end)
-{
-	unsigned long next;
-	pmd_t *pmd;
-
-	pmd = pmd_offset(pud, addr);
-	do {
-		next = pmd_addr_end(addr, end);
-		if (pmd_none_or_clear_bad(pmd))
-			continue;
-		if (ipipe_pin_pte_range(mm, pmd, vma, addr, next))
-			return -ENOMEM;
-	} while (pmd++, addr = next, addr != end);
-	return 0;
-}
-
-static inline int ipipe_pin_pud_range(struct mm_struct *mm, pgd_t *pgd,
-				      struct vm_area_struct *vma,
-				      unsigned long addr, unsigned long end)
-{
-	unsigned long next;
-	pud_t *pud;
-
-	pud = pud_offset(pgd, addr);
-	do {
-		next = pud_addr_end(addr, end);
-		if (pud_none_or_clear_bad(pud))
-			continue;
-		if (ipipe_pin_pmd_range(mm, pud, vma, addr, next))
-			return -ENOMEM;
-	} while (pud++, addr = next, addr != end);
-	return 0;
-}
-
-int ipipe_disable_ondemand_mappings(struct task_struct *tsk)
-{
-	unsigned long addr, next, end;
-	struct vm_area_struct *vma;
-	struct mm_struct *mm;
-	int result = 0;
-	pgd_t *pgd;
-
-	mm = get_task_mm(tsk);
-	if (!mm)
-		return -EPERM;
-
-	down_write(&mm->mmap_sem);
-	if (test_bit(MMF_VM_PINNED, &mm->flags))
-		goto done_mm;
-
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
-		if (!is_cow_mapping(vma->vm_flags)
-		    || !(vma->vm_flags & VM_WRITE))
-			continue;
-
-		addr = vma->vm_start;
-		end = vma->vm_end;
-
-		pgd = pgd_offset(mm, addr);
-		do {
-			next = pgd_addr_end(addr, end);
-			if (pgd_none_or_clear_bad(pgd))
-				continue;
-			if (ipipe_pin_pud_range(mm, pgd, vma, addr, next)) {
-				result = -ENOMEM;
-				goto done_mm;
-			}
-		} while (pgd++, addr = next, addr != end);
-	}
-	set_bit(MMF_VM_PINNED, &mm->flags);
-
-  done_mm:
-	up_write(&mm->mmap_sem);
-	mmput(mm);
-	return result;
-}
-
-EXPORT_SYMBOL(ipipe_disable_ondemand_mappings);
-
 #endif

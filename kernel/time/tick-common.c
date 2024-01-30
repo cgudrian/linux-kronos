@@ -69,7 +69,7 @@ static void tick_periodic(int cpu)
 		write_sequnlock(&xtime_lock);
 	}
 
-	update_root_process_times(get_irq_regs());
+	update_process_times(user_mode(get_irq_regs()));
 	profile_tick(CPU_PROFILING);
 }
 
@@ -176,10 +176,6 @@ static void tick_setup_device(struct tick_device *td,
 	}
 
 	td->evtdev = newdev;
-
-	/* I-pipe: derive global tick IRQ from CPU 0 */
-	if (cpu == 0)
-		ipipe_update_tick_evtdev(newdev);
 
 	/*
 	 * When the device is not per cpu, pin the interrupt to the

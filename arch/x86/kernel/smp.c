@@ -184,9 +184,9 @@ static void native_smp_send_stop(void)
 			udelay(1);
 	}
 
-	local_irq_save_hw(flags);
+	local_irq_save(flags);
 	disable_local_APIC();
-	local_irq_restore_hw(flags);
+	local_irq_restore(flags);
 }
 
 /*

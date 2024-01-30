@@ -404,13 +404,7 @@ static inline u32 safe_apic_wait_icr_idle(void)
 }
 
 
-#ifdef CONFIG_IPIPE
-#define ack_APIC_irq() do { } while(0)
-static inline void __ack_APIC_irq(void)
-#else /* !CONFIG_IPIPE */
-#define __ack_APIC_irq() ack_APIC_irq()
 static inline void ack_APIC_irq(void)
-#endif /* CONFIG_IPIPE */
 {
 #ifdef CONFIG_X86_LOCAL_APIC
 	/*

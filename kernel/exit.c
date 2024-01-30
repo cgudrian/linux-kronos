@@ -963,7 +963,6 @@ NORET_TYPE void do_exit(long code)
 		acct_process();
 	trace_sched_process_exit(tsk);
 
-  	ipipe_exit_notify(tsk);
 	exit_sem(tsk);
 	exit_files(tsk);
 	exit_fs(tsk);
@@ -1767,37 +1766,3 @@ SYSCALL_DEFINE3(waitpid, pid_t, pid, int __user *, stat_addr, int, options)
 }
 
 #endif
-
-void rt_daemonize(void)
-{
-	sigset_t blocked;
-
-	/*
-	 * We don't want to have TIF_FREEZE set if the system-wide hibernation
-	 * or suspend transition begins right now.
-	 */
-	current->flags |= (PF_NOFREEZE | PF_KTHREAD);
-
-	if (current->nsproxy != &init_nsproxy) {
-		get_nsproxy(&init_nsproxy);
-		switch_task_namespaces(current, &init_nsproxy);
-	}
-	set_special_pids(&init_struct_pid);
-	proc_clear_tty(current);
-
-	/* Block and flush all signals */
-	sigfillset(&blocked);
-	sigprocmask(SIG_BLOCK, &blocked, NULL);
-	flush_signals(current);
-
-	/* Become as one with the init task */
-
-	daemonize_fs_struct();
-	exit_files(current);
-	current->files = init_task.files;
-	atomic_inc(&current->files->count);
-
-	reparent_to_kthreadd();
-}
-
-EXPORT_SYMBOL(rt_daemonize);

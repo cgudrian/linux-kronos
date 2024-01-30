@@ -30,7 +30,7 @@ void *_mmx_memcpy(void *to, const void *from, size_t len)
 	void *p;
 	int i;
 
-	if (unlikely(!ipipe_root_domain_p || in_interrupt()))
+	if (unlikely(in_interrupt()))
 		return __memcpy(to, from, len);
 
 	p = to;
